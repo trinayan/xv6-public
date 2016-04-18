@@ -7,6 +7,12 @@
 #include "proc.h"
 #include "spinlock.h"
 
+struct proc* q0[64];
+struct proc* q1[64];
+int count0=0;
+int count1=0;
+
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -47,6 +53,10 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->ticks=0;
+  p->priority=1;
+  q0[count0]=p;
+  count0++;
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -69,6 +79,8 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+
+  cprintf("COunt %d \n", count0);
 
   return p;
 }
@@ -266,14 +278,21 @@ void
 scheduler(void)
 {
   struct proc *p;
-
-  for(;;){
+  int i=0;
+  for(;;)
+  {
     // Enable interrupts on this processor.
     sti();
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+
+
+     for(i=0;i<count0;i++)
+     {
+
+      p=q0[i];
+
       if(p->state != RUNNABLE)
         continue;
 
@@ -289,7 +308,7 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
-    }
+     }
     release(&ptable.lock);
 
   }
@@ -464,3 +483,4 @@ procdump(void)
     cprintf("\n");
   }
 }
+
