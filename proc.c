@@ -7,10 +7,53 @@
 #include "proc.h"
 #include "spinlock.h"
 
+// MOD: Queue structure
+struct Queue{
+	struct proc *proc[NPROC];	// Holds all the processes for the queue
+	int head;			// Next empty proc space
+	int tail;			// Current executing task 
+	int num_tasks;			// Total number of tasks in current queue
+};
+
+void initQueue(struct Queue *q){
+	q->head =0;
+	q->tail=0;
+	q->num_tasks=0;
+}
+
+struct proc* rmProc(struct Queue *q){
+	if (q->num_tasks ==0){
+		cprintf("Queue is empty");
+	}	
+	struct proc *temp;
+	temp = q->proc[q->tail++];
+	q->num_tasks--;
+	if (q->tail == NPROC){ q->tail = 0;}
+	return temp;
+}
+void addProc(struct Queue *q, struct proc *proc){
+	q->proc[q->head++] = proc;
+	if (q->head == NPROC){ q->head = 0;}
+	q->num_tasks++;
+}
+void procDown(struct Queue *q_old, struct Queue *q_new){
+	struct proc *temp;
+	temp = rmProc(q_old);
+	addProc(q_new, temp);
+}
+
 struct proc* q0[64];
+struct proc* q0_temp[64];
 struct proc* q1[64];
-int count0=0;
-int count1=0;
+struct proc* q1_temp[64];
+int q0cnt=0;
+
+struct Queue Q0;
+struct Queue Q1;
+
+int q0cnt_temp=0;
+int q1cnt=0;
+int q1cnt_temp=0;
 
 
 struct {
@@ -53,10 +96,15 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+
+  // MOD: Added init variables for tick count
   p->ticks=0;
-  p->priority=1;
-  q0[count0]=p;
-  count0++;
+  q0[q0cnt++]=p;
+  q0_temp[q0cnt_temp++]=p;
+  //Q0.proc[Q0.head++]=p;
+  addProc(&Q0,p);
+  //Q0.num_tasks++;
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -80,7 +128,7 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  cprintf("COunt %d \n", count0);
+ // cprintf("COunt %d \n", count0);
 
   return p;
 }
@@ -278,7 +326,10 @@ void
 scheduler(void)
 {
   struct proc *p;
-  int i=0;
+  //int i=0;
+  initQueue(&Q0);
+  initQueue(&Q1);
+
   for(;;)
   {
     // Enable interrupts on this processor.
@@ -288,22 +339,67 @@ scheduler(void)
     acquire(&ptable.lock);
 
 
-     for(i=0;i<count0;i++)
+    while(Q0.num_tasks != 0)
      {
+        //p=q0[i];
+	//p=Q0.proc[Q0.tail];
+	p=rmProc(&Q0);
+        Q0.num_tasks++;
+        //procDown(&Q0, &Q0);
+	//if (Q0.tail == Q0.num_tasks){initQueue(Q0);}
+	//Q0.num_tasks--;
+	
 
-      p=q0[i];
-
-      if(p->state != RUNNABLE)
-        continue;
+	if(p->state != RUNNABLE)
+		continue;
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      cprintf(" Current process: %d\n", p->pid);
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
+      
+      //procDown(&Q0, &Q0);
+      /* MOD: Adding multilevel queue */
+
+      
+     // p->ticks++;
+     // if(p->ticks == 10)
+     // {
+     //    int j=0;
+     //    cprintf("\nBEFORE:\n"); 
+     //    for(j=0;j<q0cnt_temp;j++)
+     //    {
+     //          cprintf("%d--->", q0_temp[j]->pid );
+     //    }
+     //    q0_temp[i]=0;
+     //    //cprintf("%d", q0_temp[i]->pid );
+     //    q0cnt_temp--;
+     //    cprintf("\nAFTER:\n"); 
+     //    for(j=0;j<q0cnt_temp;j++)
+     //    {
+     //          cprintf("%d--->", q0_temp[j]->pid );
+     //    }
+     //    
+
+     //    q1_temp[q1cnt_temp]=p;
+     //    cprintf("%d", q1_temp[q1cnt_temp]->pid );
+     //    q1cnt_temp++;
+     //    
+     //    //int j=0;
+     //    //for(j=0;j<q1cnt_temp;j++)
+     //    //{
+     //    //      cprintf("%d--->", q1_temp[j]->pid );
+     //    //}
+     //    //cprintf("\n"); 
+     //    //q0_temp[i]=0;
+     //    //Function to add to another queues end
+     //    // Function to remove from queue 
+     // }
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
